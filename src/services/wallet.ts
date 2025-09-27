@@ -1,6 +1,6 @@
 // Wallet Integration Service using RainbowKit and wagmi v2
-import { useAccount, useBalance, useDisconnect } from 'wagmi'
-import { formatUnits } from 'viem'
+import { useAccount, useBalance, useDisconnect, useSendTransaction } from 'wagmi'
+import { formatUnits, parseUnits } from 'viem'
 
 export interface WalletInfo {
   address: string
@@ -21,16 +21,18 @@ export interface WalletProvider {
  */
 export function useWallet() {
   const { address, isConnected } = useAccount()
-  const { data: balanceData } = useBalance({
+  const { data: balanceData, refetch: refetchBalance } = useBalance({
     address: address,
     enabled: Boolean(address),
   })
   const { disconnect } = useDisconnect()
+  const { sendTransactionAsync } = useSendTransaction()
 
-  // Convert balance to cents for UI display (assuming 1 MATIC = $1 for simplicity)
-  // In a real app, you would use an oracle or price feed
-  const balanceInCents = balanceData 
-    ? parseInt((parseFloat(balanceData.formatted) * 100).toFixed(0)) 
+  // Convert balance to cents for UI display
+  // For Polygon Amoy testnet, we'll use a simple conversion
+  // 1 MATIC ≈ $1, so we convert the formatted balance to cents
+  const balanceInCents = balanceData
+    ? Math.floor(parseFloat(balanceData.formatted) * 100)
     : 0
 
   return {
@@ -38,6 +40,8 @@ export function useWallet() {
     isConnected,
     balance: balanceInCents,
     disconnect,
+    refetchBalance,
+    sendTransactionAsync,
   }
 }
 
@@ -53,19 +57,42 @@ export async function getWalletBalance(): Promise<number> {
 }
 
 /**
- * Deduct amount from wallet (for payment processing)
- * In a real implementation, this would create and send a transaction
+ * Deduct amount from wallet using MetaMask transaction
+ * This creates a real transaction that deducts from the user's wallet
  */
-export async function deductFromWallet(cents: number): Promise<boolean> {
-  console.log('💸 Deducting from wallet:', cents, 'cents')
-  // In a real implementation, you would:
-  // 1. Convert cents to MATIC amount
-  // 2. Create a transaction to transfer tokens
-  // 3. Sign and send the transaction using wagmi's useContractWrite or useSendTransaction
-  
-  // For now, we'll simulate success
-  await new Promise((resolve) => setTimeout(resolve, 500))
-  return true
+export async function deductFromWallet(
+  cents: number,
+  sendTransactionAsync: any,
+  toAddress: string = '0x0000000000000000000000000000000000000000' // Burn address for demo
+): Promise<{ success: boolean; txHash?: string; error?: string }> {
+  try {
+    console.log('💸 Deducting from wallet:', cents, 'cents')
+    
+    // Convert cents to MATIC (assuming 1 MATIC = $1 for simplicity)
+    const maticAmount = cents / 100 // Convert cents to MATIC
+    const weiAmount = parseUnits(maticAmount.toString(), 18) // Convert to wei
+    
+    console.log('Sending transaction:', {
+      to: toAddress,
+      value: weiAmount,
+      amount: maticAmount,
+    })
+
+    // Send transaction through MetaMask
+    const txHash = await sendTransactionAsync({
+      to: toAddress,
+      value: weiAmount,
+    })
+
+    console.log('✅ Transaction sent:', txHash)
+    return { success: true, txHash }
+  } catch (error) {
+    console.error('❌ Transaction failed:', error)
+    return { 
+      success: false, 
+      error: error instanceof Error ? error.message : 'Transaction failed' 
+    }
+  }
 }
 
 /**

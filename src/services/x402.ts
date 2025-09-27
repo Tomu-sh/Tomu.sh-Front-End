@@ -1,5 +1,5 @@
-// X402 Integration Service
-// TODO: Replace with actual x402 SDK integration
+// X402 Integration Service - HUSK for future integration
+// This is a placeholder that can be replaced with actual x402 SDK integration
 
 export interface X402Quote {
   estimatedCost: number // in cents
@@ -15,13 +15,13 @@ export interface X402Payment {
 
 /**
  * Get cost estimate for a generation request
- * TODO: Integrate with x402 quote API
+ * HUSK: Replace with actual x402 quote API integration
  */
 export async function getCostEstimate(prompt: string): Promise<X402Quote> {
-  // Mock implementation - replace with x402 SDK call
-  const basePrice = 5 // 5 cents base
+  // HUSK: Replace with x402 SDK call
+  const basePrice = 0 // No base cost
   const perCharPrice = Math.ceil(prompt.length * 0.1) // 0.1 cents per character
-  const gasOverhead = 2 // 2 cents gas overhead
+  const gasOverhead = 1 // Minimal gas overhead
 
   const estimatedCost = basePrice + perCharPrice + gasOverhead
 
@@ -33,40 +33,22 @@ export async function getCostEstimate(prompt: string): Promise<X402Quote> {
 }
 
 /**
- * Process payment through x402 protocol
- * TODO: Integrate with x402 SDK for actual payment processing
+ * HUSK: Process payment through x402 protocol
+ * This is a placeholder - replace with actual x402 SDK integration
  */
 export async function payWithX402(
   prompt: string,
   quote: X402Quote
 ): Promise<X402Payment> {
-  // Mock implementation - replace with x402 SDK call
-  console.log('🔄 Processing x402 payment...', { prompt, quote })
-
-  // Simulate network delay
-  await new Promise((resolve) => setTimeout(resolve, 1500))
-
-  // Mock transaction hash generation (Polygon format)
-  const txHash = '0x' + Math.random().toString(16).substring(2, 66)
-
-  console.log('✅ X402 payment completed:', {
-    txHash,
-    amount: quote.estimatedCost,
-  })
-
-  return {
-    txHash,
-    status: 'completed',
-    amount: quote.estimatedCost,
-  }
+  // HUSK: Replace with actual x402 SDK call
+  throw new Error('X402 integration not implemented - use direct wallet payment instead')
 }
 
 /**
- * Verify payment status on-chain
- * TODO: Integrate with Polygon RPC or x402 verification API
+ * HUSK: Verify payment status on-chain
+ * This is a placeholder - replace with actual x402 verification
  */
 export async function verifyPayment(txHash: string): Promise<boolean> {
-  // Mock implementation - replace with actual on-chain verification
-  console.log('🔍 Verifying payment on-chain:', txHash)
-  return true
+  // HUSK: Replace with actual on-chain verification
+  throw new Error('X402 verification not implemented')
 }

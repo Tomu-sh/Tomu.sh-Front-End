@@ -3,6 +3,7 @@ import {
   Unauthenticated,
   useQuery,
   useMutation,
+  useAction,
 } from 'convex/react'
 import { api } from '../convex/_generated/api'
 import { SignInForm } from './SignInForm'
@@ -13,7 +14,7 @@ import ThemeToggle from './lib/ThemeToggle'
 import { WalletButton } from './components/WalletButton'
 
 // Import integration services
-import { getCostEstimate, payWithX402, type X402Quote } from './services/x402'
+import { getCostEstimate, type X402Quote } from './services/x402'
 import { useWallet, deductFromWallet } from './services/wallet'
 import {
   logTransaction,
@@ -114,13 +115,36 @@ function GenerationInterface() {
   const [result, setResult] = useState<{
     txHash: string
     result: string
+    imageUrl?: string
+    model?: string
   } | null>(null)
   const [quote, setQuote] = useState<X402Quote | null>(null)
+  const [generationType, setGenerationType] = useState<'text' | 'image'>(
+    'image'
+  )
+  const [imageOptions, setImageOptions] = useState({
+    model: 'google/gemini-2.5-flash-image-preview',
+    size: '1024x1024' as
+      | '256x256'
+      | '512x512'
+      | '1024x1024'
+      | '1792x1024'
+      | '1024x1792',
+    quality: 'standard' as 'standard' | 'hd',
+    style: 'vivid' as 'vivid' | 'natural',
+  })
 
   // Use our wallet hook to get real wallet data
-  const { balance: walletBalance } = useWallet()
+  const {
+    balance: walletBalance,
+    sendTransactionAsync,
+    refetchBalance,
+  } = useWallet()
 
   const loggedInUser = useQuery(api.auth.loggedInUser)
+
+  // Use action hook for processGeneration (it's now an action, not a mutation)
+  const processGeneration = useAction(api.generation.processGeneration)
 
   // Get cost estimate when prompt changes
   useEffect(() => {
@@ -130,6 +154,26 @@ function GenerationInterface() {
       setQuote(null)
     }
   }, [prompt])
+
+  // Process the result string to extract image data if it's JSON
+  const processResult = (resultString: string) => {
+    try {
+      // Try to parse as JSON (for image results)
+      const parsedResult = JSON.parse(resultString)
+      if (parsedResult.url) {
+        return {
+          imageUrl: parsedResult.url,
+          model: parsedResult.model || 'Unknown model',
+          text: `Image generated with ${parsedResult.model || 'AI'} model`,
+        }
+      }
+      // If no URL found, return the string as is
+      return { text: resultString }
+    } catch (e) {
+      // If not valid JSON, return the string as is
+      return { text: resultString }
+    }
+  }
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !quote || !loggedInUser) return
@@ -145,38 +189,53 @@ function GenerationInterface() {
     setResult(null)
 
     try {
-      // Step 1: Process payment through x402
-      toast.info('Processing payment via x402 protocol...')
-      const payment = await payWithX402(prompt.trim(), quote)
+      // Step 1: Process payment through MetaMask transaction
+      toast.info('Processing payment via MetaMask...')
 
-      // Step 2: Deduct from wallet (mock)
-      await deductFromWallet(quote.estimatedCost)
-      // No need to manually update balance, it will update via the useWallet hook
+      const paymentResult = await deductFromWallet(
+        quote.estimatedCost,
+        sendTransactionAsync
+      )
+
+      if (!paymentResult.success) {
+        throw new Error(paymentResult.error || 'Payment failed')
+      }
+
+      // Step 2: Refresh wallet balance to reflect the deduction
+      await refetchBalance()
 
       // Step 3: Log transaction
       await logTransaction(
         loggedInUser._id,
-        payment.txHash,
-        payment.amount,
+        paymentResult.txHash!,
+        quote.estimatedCost,
         prompt.trim()
       )
 
-      // Step 4: Simulate AI generation (replace with actual API call)
-      toast.info('Generating AI content...')
-      await new Promise((resolve) => setTimeout(resolve, 2000))
+      // Step 4: Call Convex action to generate content
+      toast.info(`Generating AI ${generationType}...`)
 
-      const generatedResult = `Generated result for: "${prompt.trim()}" - A beautiful AI-generated creation based on your prompt! This content was paid for via x402 protocol.`
+      // Call the actual Convex action with the transaction hash
+      const generationResult = await processGeneration({
+        prompt: prompt.trim(),
+        estimatedCost: quote.estimatedCost,
+        generationType,
+        options: generationType === 'image' ? imageOptions : undefined,
+        txHash: paymentResult.txHash,
+      })
 
-      // Step 5: Update transaction status
-      await updateTransactionStatus(payment.txHash, 'completed')
+      // Process the result
+      const processedResult = processResult(generationResult.result)
 
       setResult({
-        txHash: payment.txHash,
-        result: generatedResult,
+        txHash: paymentResult.txHash!,
+        result: processedResult.text,
+        imageUrl: processedResult.imageUrl,
+        model: processedResult.model,
       })
 
       toast.success(
-        `Generation completed! Cost: $${(quote.estimatedCost / 100).toFixed(2)}`
+        `${generationType.charAt(0).toUpperCase() + generationType.slice(1)} generated! Cost: $${(quote.estimatedCost / 100).toFixed(2)}`
       )
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Generation failed')
@@ -200,20 +259,135 @@ function GenerationInterface() {
     <div className='space-y-6'>
       {/* Input Section */}
       <div className='bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6'>
-        <label
-          htmlFor='prompt'
-          className='block text-sm font-medium text-gray-700 dark:text-gray-300 mb-3'
-        >
-          Generation Prompt
-        </label>
+        <div className='flex items-center justify-between mb-4'>
+          <label
+            htmlFor='prompt'
+            className='block text-sm font-medium text-gray-700 dark:text-gray-300'
+          >
+            Generation Prompt
+          </label>
+
+          {/* Generation Type Toggle */}
+          <div className='flex items-center space-x-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-1'>
+            <button
+              onClick={() => setGenerationType('text')}
+              className={`px-3 py-1 text-xs font-medium rounded-md ${
+                generationType === 'text'
+                  ? 'bg-white dark:bg-gray-700 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              Text
+            </button>
+            <button
+              onClick={() => setGenerationType('image')}
+              className={`px-3 py-1 text-xs font-medium rounded-md ${
+                generationType === 'image'
+                  ? 'bg-white dark:bg-gray-700 shadow-sm'
+                  : 'text-gray-600 dark:text-gray-400'
+              }`}
+            >
+              Image
+            </button>
+          </div>
+        </div>
+
         <textarea
           id='prompt'
           value={prompt}
           onChange={(e) => setPrompt(e.target.value)}
-          placeholder='Generate an image of a cat astronaut floating in space...'
+          placeholder={
+            generationType === 'image'
+              ? 'Generate an image of a cat astronaut floating in space...'
+              : 'Generate a short story about a space adventure...'
+          }
           className='w-full px-4 py-3 border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 rounded-lg focus:ring-2 focus:ring-blue-500 dark:focus:ring-violet-500 focus:border-transparent resize-none text-gray-900 dark:text-gray-100 placeholder:text-gray-400 dark:placeholder:text-gray-500'
           rows={3}
         />
+
+        {/* Image Options */}
+        {generationType === 'image' && (
+          <div className='mt-4 grid grid-cols-2 gap-4'>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Model
+              </label>
+              <select
+                value={imageOptions.model}
+                onChange={(e) =>
+                  setImageOptions({ ...imageOptions, model: e.target.value })
+                }
+                className='w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 rounded-lg'
+              >
+                <option value='google/gemini-2.5-flash-image-preview'>
+                  Gemini 2.5 Flash Image
+                </option>
+              </select>
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Size
+              </label>
+              <select
+                value={imageOptions.size}
+                onChange={(e) =>
+                  setImageOptions({
+                    ...imageOptions,
+                    size: e.target.value as
+                      | '256x256'
+                      | '512x512'
+                      | '1024x1024'
+                      | '1792x1024'
+                      | '1024x1792',
+                  })
+                }
+                className='w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 rounded-lg'
+              >
+                <option value='256x256'>Small (256x256)</option>
+                <option value='512x512'>Medium (512x512)</option>
+                <option value='1024x1024'>Large (1024x1024)</option>
+                <option value='1792x1024'>Wide (1792x1024)</option>
+                <option value='1024x1792'>Tall (1024x1792)</option>
+              </select>
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Quality
+              </label>
+              <select
+                value={imageOptions.quality}
+                onChange={(e) =>
+                  setImageOptions({
+                    ...imageOptions,
+                    quality: e.target.value as 'standard' | 'hd',
+                  })
+                }
+                className='w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 rounded-lg'
+              >
+                <option value='standard'>Standard</option>
+                <option value='hd'>HD</option>
+              </select>
+            </div>
+            <div>
+              <label className='block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1'>
+                Style
+              </label>
+              <select
+                value={imageOptions.style}
+                onChange={(e) =>
+                  setImageOptions({
+                    ...imageOptions,
+                    style: e.target.value as 'vivid' | 'natural',
+                  })
+                }
+                className='w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 rounded-lg'
+              >
+                <option value='vivid'>Vivid</option>
+                <option value='natural'>Natural</option>
+              </select>
+            </div>
+          </div>
+        )}
 
         {/* Cost Estimate */}
         {prompt && quote && (
@@ -247,7 +421,7 @@ function GenerationInterface() {
               Processing x402 Payment & Generation...
             </>
           ) : (
-            'Confirm + Pay via x402'
+            `Generate ${generationType.charAt(0).toUpperCase() + generationType.slice(1)} with x402`
           )}
         </button>
       </div>
@@ -257,8 +431,24 @@ function GenerationInterface() {
         <div className='bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6'>
           <h3 className='text-lg font-semibold mb-4'>Generation Result</h3>
 
+          {/* Display Image if available */}
+          {result.imageUrl && (
+            <div className='mb-4 flex justify-center'>
+              <img
+                src={result.imageUrl}
+                alt={prompt}
+                className='rounded-lg max-h-[500px] object-contain shadow-md'
+              />
+            </div>
+          )}
+
+          {/* Display text result */}
           <div className='bg-gray-50 dark:bg-gray-950 rounded-lg p-4 mb-4'>
-            <p className='text-gray-800 dark:text-gray-100'>{result.result}</p>
+            <p className='text-gray-800 dark:text-gray-100'>
+              {result.imageUrl
+                ? `Generated using ${result.model || 'AI'}`
+                : result.result}
+            </p>
           </div>
 
           <div className='flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-800'>
@@ -277,25 +467,6 @@ function GenerationInterface() {
         </div>
       )}
 
-      {/* Integration Status */}
-      <div className='bg-yellow-50 dark:bg-yellow-950/30 border border-yellow-200 dark:border-yellow-900 rounded-lg p-4'>
-        <h4 className='text-sm font-medium text-yellow-800 dark:text-yellow-300 mb-2'>
-          🚧 Integration Status
-        </h4>
-        <ul className='text-xs text-yellow-700 dark:text-yellow-400 space-y-1'>
-          <li>
-            • x402 Protocol: Mock implementation (ready for SDK integration)
-          </li>
-          <li>
-            • Polygon Wallet: Mock connection (ready for MetaMask/WalletConnect)
-          </li>
-          <li>
-            • Transaction Logging: Console only (ready for Convex backend)
-          </li>
-          <li>• On-chain Verification: Mock (ready for Polygonscan API)</li>
-        </ul>
-      </div>
-
       {/* Transaction History */}
       <TransactionHistory />
     </div>
@@ -304,6 +475,18 @@ function GenerationInterface() {
 
 function TransactionHistory() {
   const transactions = useQuery(api.generation.getTransactionHistory)
+
+  // Function to extract image URL from result if it's an image generation
+  const extractImageUrl = (result: string | undefined): string | null => {
+    if (!result) return null
+
+    try {
+      const parsed = JSON.parse(result)
+      return parsed.url || null
+    } catch (e) {
+      return null
+    }
+  }
 
   if (!transactions || transactions.length === 0) {
     return (
@@ -320,41 +503,60 @@ function TransactionHistory() {
     <div className='bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6'>
       <h3 className='text-lg font-semibold mb-4'>Recent Transactions</h3>
 
-      <div className='space-y-3'>
-        {transactions.slice(0, 5).map((tx) => (
-          <div
-            key={tx._id}
-            className='flex items-center justify-between py-2 border-b border-gray-100 dark:border-gray-800 last:border-b-0'
-          >
-            <div className='flex-1'>
-              <p className='text-sm font-medium truncate'>
-                {tx.prompt.length > 50
-                  ? tx.prompt.substring(0, 50) + '...'
-                  : tx.prompt}
-              </p>
-              <p className='text-xs text-gray-500 dark:text-gray-400'>
-                {new Date(tx._creationTime).toLocaleDateString()} • x402
-                Protocol
-              </p>
+      <div className='space-y-4'>
+        {transactions.slice(0, 5).map((tx) => {
+          const imageUrl =
+            tx.generationType === 'image' ? extractImageUrl(tx.result) : null
+
+          return (
+            <div
+              key={tx._id}
+              className='flex flex-col py-3 border-b border-gray-100 dark:border-gray-800 last:border-b-0'
+            >
+              <div className='flex items-center justify-between'>
+                <div className='flex-1'>
+                  <p className='text-sm font-medium truncate'>
+                    {tx.prompt.length > 50
+                      ? tx.prompt.substring(0, 50) + '...'
+                      : tx.prompt}
+                  </p>
+                  <p className='text-xs text-gray-500 dark:text-gray-400'>
+                    {new Date(tx._creationTime).toLocaleDateString()} •
+                    {tx.generationType === 'image' ? ' Image' : ' Text'} • x402
+                    Protocol
+                  </p>
+                </div>
+                <div className='text-right ml-4'>
+                  <p className='text-sm font-medium'>
+                    ${(tx.amount / 100).toFixed(2)}
+                  </p>
+                  <span
+                    className={`text-xs px-2 py-1 rounded-full ${
+                      tx.status === 'completed'
+                        ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
+                        : tx.status === 'pending'
+                          ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'
+                          : 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'
+                    }`}
+                  >
+                    {tx.status}
+                  </span>
+                </div>
+              </div>
+
+              {/* Show image thumbnail if it's an image generation */}
+              {imageUrl && tx.status === 'completed' && (
+                <div className='mt-2 flex justify-start'>
+                  <img
+                    src={imageUrl}
+                    alt={tx.prompt}
+                    className='h-20 w-20 object-cover rounded-md shadow-sm'
+                  />
+                </div>
+              )}
             </div>
-            <div className='text-right ml-4'>
-              <p className='text-sm font-medium'>
-                ${(tx.amount / 100).toFixed(2)}
-              </p>
-              <span
-                className={`text-xs px-2 py-1 rounded-full ${
-                  tx.status === 'completed'
-                    ? 'bg-green-100 dark:bg-green-900/40 text-green-800 dark:text-green-300'
-                    : tx.status === 'pending'
-                      ? 'bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-300'
-                      : 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-300'
-                }`}
-              >
-                {tx.status}
-              </span>
-            </div>
-          </div>
-        ))}
+          )
+        })}
       </div>
     </div>
   )

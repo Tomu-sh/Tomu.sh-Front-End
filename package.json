@@ -7,6 +7,8 @@
     "dev": "npm-run-all --parallel dev:frontend dev:backend",
     "dev:frontend": "vite --open",
     "dev:backend": "npx convex dev --once --typecheck=disable",
+    "dev:litellm": "docker compose -f docker-compose.litellm.yml up",
+    "dev:full": "npm-run-all --parallel dev:frontend dev:backend dev:litellm",
     "build": "vite build",
     "lint": "tsc -p convex -noEmit --pretty false && tsc -p . -noEmit --pretty false && convex dev --once && vite build"
   },
@@ -18,6 +20,7 @@
     "clsx": "^2.1.1",
     "convex": "^1.24.2",
     "ethers": "^6.15.0",
+    "openai": "^5.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "sonner": "^2.0.3",
