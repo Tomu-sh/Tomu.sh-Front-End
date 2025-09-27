@@ -6,8 +6,8 @@ const baseURL = useLiteLLM
   ? process.env.VITE_LITELLM_BASE_URL || 'http://localhost:8080/v1'
   : 'https://openrouter.ai/api/v1'
 const apiKey = useLiteLLM
-  ? process.env.VITE_LITELLM_API_KEY || 'sk-1234'
-  : process.env.OPENROUTER_API_KEY || 'placeholder_key'
+  ? process.env.VITE_LITELLM_API_KEY || ''
+  : process.env.OPENROUTER_API_KEY || ''
 
 // OpenRouter API configuration
 const openRouter = new OpenAI({

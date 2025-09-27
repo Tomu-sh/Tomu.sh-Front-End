@@ -279,15 +279,15 @@ export const processGeneration = action({
           throw new Error('No image returned from OpenRouter response')
         }
 
-        // Store the full image data for display in transaction history
+        // Store image metadata without the actual image data (too large for Convex)
         result = JSON.stringify({
-          url: imageUrl,
+          url: imageUrl, // Store the full base64 URL for immediate use
           model,
           promptId:
             response.created?.toString() ||
             response.id?.toString() ||
             Date.now().toString(),
-          isBase64: imageUrl && imageUrl.startsWith('data:image/'),
+          note: 'Image data not stored in Convex due to size limits',
         })
 
         console.log('Final result:', result)

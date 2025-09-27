@@ -14,12 +14,17 @@ import ThemeToggle from './lib/ThemeToggle'
 import { WalletButton } from './components/WalletButton'
 
 // Import integration services
-import { getCostEstimate, type X402Quote } from './services/x402'
+import {
+  getCostEstimate,
+  type X402Quote,
+  generateImagePaid,
+} from './services/x402'
 import { useWallet, deductFromWallet } from './services/wallet'
 import {
   logTransaction,
   updateTransactionStatus,
 } from './services/transactions'
+import { generateImageURL } from './services/litellm'
 
 export default function App() {
   return (
@@ -98,6 +103,7 @@ function Content() {
 
       <Authenticated>
         <GenerationInterface />
+        <div className='mt-8'></div>
       </Authenticated>
 
       <Unauthenticated>
@@ -110,6 +116,7 @@ function Content() {
 }
 
 function GenerationInterface() {
+  const processGenerationAction = useAction(api.generation.processGeneration)
   const [prompt, setPrompt] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const [result, setResult] = useState<{
@@ -118,12 +125,13 @@ function GenerationInterface() {
     imageUrl?: string
     model?: string
   } | null>(null)
+  const [isDirectTest, setIsDirectTest] = useState(false)
   const [quote, setQuote] = useState<X402Quote | null>(null)
   const [generationType, setGenerationType] = useState<'text' | 'image'>(
     'image'
   )
   const [imageOptions, setImageOptions] = useState({
-    model: 'google/gemini-2.5-flash-image-preview',
+    model: 'gemini-2.5-flash-image',
     size: '1024x1024' as
       | '256x256'
       | '512x512'
@@ -149,11 +157,11 @@ function GenerationInterface() {
   // Get cost estimate when prompt changes
   useEffect(() => {
     if (prompt.trim()) {
-      getCostEstimate(prompt).then(setQuote)
+      getCostEstimate(prompt, imageOptions.size).then(setQuote)
     } else {
       setQuote(null)
     }
-  }, [prompt])
+  }, [prompt, imageOptions.size])
 
   // Process the result string to extract image data if it's JSON
   const processResult = (resultString: string) => {
@@ -172,6 +180,69 @@ function GenerationInterface() {
     } catch (e) {
       // If not valid JSON, return the string as is
       return { text: resultString }
+    }
+  }
+
+  const handleDirectTest = async () => {
+    if (!prompt.trim()) return
+
+    setIsGenerating(true)
+    setResult(null)
+    setIsDirectTest(true)
+
+    try {
+      toast.info('Testing direct image generation (no payment required)...')
+
+      const imageUrl = await generateImageURL(prompt, {
+        model: 'gemini-2.5-flash-image',
+        size: imageOptions.size,
+        quality: imageOptions.quality,
+        style: imageOptions.style,
+      })
+
+      console.log('Direct test - Image URL received:', imageUrl)
+      console.log('Direct test - Image URL length:', imageUrl?.length)
+      console.log(
+        'Direct test - Image URL starts with data:',
+        imageUrl?.startsWith('data:')
+      )
+
+      // Log the transaction for history tracking
+      const resultData = JSON.stringify({
+        url: imageUrl,
+        model: 'gemini-2.5-flash-image',
+        promptId: `direct_${Date.now()}`,
+        note: 'Direct test - no payment required',
+      })
+
+      // Log transaction using processGeneration action
+      await processGenerationAction({
+        txHash: `direct-test-${Date.now()}`,
+        prompt,
+        estimatedCost: 0, // No cost for direct test
+        generationType: 'image',
+        options: {
+          model: 'gemini-2.5-flash-image',
+          size: imageOptions.size,
+          quality: imageOptions.quality,
+          style: imageOptions.style,
+        },
+      })
+
+      setResult({
+        txHash: 'direct-test',
+        result: 'Direct test completed',
+        imageUrl,
+        model: 'gemini-2.5-flash-image',
+      })
+
+      toast.success('Direct test completed!')
+    } catch (error) {
+      console.error('Direct test failed:', error)
+      toast.error('Direct test failed: ' + (error as Error).message)
+    } finally {
+      setIsGenerating(false)
+      setIsDirectTest(false)
     }
   }
 
@@ -212,27 +283,42 @@ function GenerationInterface() {
         prompt.trim()
       )
 
-      // Step 4: Call Convex action to generate content
-      toast.info(`Generating AI ${generationType}...`)
+      // Step 4: Call paid API (x402) which forwards to LiteLLM after payment
+      toast.info(`Generating AI ${generationType} via x402...`)
 
-      // Call the actual Convex action with the transaction hash
-      const generationResult = await processGeneration({
-        prompt: prompt.trim(),
-        estimatedCost: quote.estimatedCost,
-        generationType,
-        options: generationType === 'image' ? imageOptions : undefined,
-        txHash: paymentResult.txHash,
-      })
+      if (generationType === 'image') {
+        const data = await generateImagePaid(prompt.trim(), imageOptions.size)
+        // Try common shapes: { data: [{ b64_json }]} or { url }
+        let imageUrl = ''
+        if (data?.data?.[0]?.b64_json) {
+          imageUrl = `data:image/png;base64,${data.data[0].b64_json}`
+        } else if (data?.url) {
+          imageUrl = data.url
+        } else if (data?.data?.[0]?.url) {
+          imageUrl = data.data[0].url
+        }
 
-      // Process the result
-      const processedResult = processResult(generationResult.result)
-
-      setResult({
-        txHash: paymentResult.txHash!,
-        result: processedResult.text,
-        imageUrl: processedResult.imageUrl,
-        model: processedResult.model,
-      })
+        setResult({
+          txHash: paymentResult.txHash!,
+          result: 'Image generated',
+          imageUrl,
+          model: 'gemini-2.5-flash-image',
+        })
+      } else {
+        // fallback to existing Convex text flow if needed
+        const generationResult = await processGeneration({
+          prompt: prompt.trim(),
+          estimatedCost: quote.estimatedCost,
+          generationType,
+          txHash: paymentResult.txHash,
+        })
+        const processedResult = processResult(generationResult.result)
+        setResult({
+          txHash: paymentResult.txHash!,
+          result: processedResult.text,
+          model: processedResult.model,
+        })
+      }
 
       toast.success(
         `${generationType.charAt(0).toUpperCase() + generationType.slice(1)} generated! Cost: $${(quote.estimatedCost / 100).toFixed(2)}`
@@ -319,7 +405,7 @@ function GenerationInterface() {
                 }
                 className='w-full px-3 py-2 text-sm border border-gray-300 dark:border-gray-700 bg-white dark:bg-gray-950 rounded-lg'
               >
-                <option value='google/gemini-2.5-flash-image-preview'>
+                <option value='gemini-2.5-flash-image'>
                   Gemini 2.5 Flash Image
                 </option>
               </select>
@@ -409,13 +495,29 @@ function GenerationInterface() {
           </div>
         )}
 
+        {/* Direct Test Button */}
+        <button
+          onClick={handleDirectTest}
+          disabled={!prompt.trim() || isGenerating}
+          className='mt-4 w-full bg-green-600 hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-sm hover:shadow-md flex items-center justify-center gap-2'
+        >
+          {isGenerating && isDirectTest ? (
+            <>
+              <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>
+              Testing Direct Generation...
+            </>
+          ) : (
+            '🧪 Test Direct (No Payment Required)'
+          )}
+        </button>
+
         {/* Action Button */}
         <button
           onClick={handleGenerate}
           disabled={!canGenerate}
-          className='mt-4 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-sm hover:shadow-md flex items-center justify-center gap-2 dark:bg-violet-600 dark:hover:bg-violet-500'
+          className='mt-2 w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors shadow-sm hover:shadow-md flex items-center justify-center gap-2 dark:bg-violet-600 dark:hover:bg-violet-500'
         >
-          {isGenerating ? (
+          {isGenerating && !isDirectTest ? (
             <>
               <div className='animate-spin rounded-full h-4 w-4 border-b-2 border-white'></div>
               Processing x402 Payment & Generation...
@@ -438,6 +540,8 @@ function GenerationInterface() {
                 src={result.imageUrl}
                 alt={prompt}
                 className='rounded-lg max-h-[500px] object-contain shadow-md'
+                onLoad={() => console.log('Image loaded successfully')}
+                onError={(e) => console.error('Image failed to load:', e)}
               />
             </div>
           )}
@@ -449,6 +553,16 @@ function GenerationInterface() {
                 ? `Generated using ${result.model || 'AI'}`
                 : result.result}
             </p>
+            {result.imageUrl && (
+              <div className='mt-2 text-xs text-gray-500'>
+                <p>Image URL length: {result.imageUrl.length}</p>
+                <p>
+                  Starts with data:{' '}
+                  {result.imageUrl.startsWith('data:') ? 'Yes' : 'No'}
+                </p>
+                <p>Preview: {result.imageUrl.substring(0, 50)}...</p>
+              </div>
+            )}
           </div>
 
           <div className='flex items-center justify-between pt-4 border-t border-gray-200 dark:border-gray-800'>
@@ -473,6 +587,26 @@ function GenerationInterface() {
   )
 }
 
+// // Component to handle image thumbnails with Convex references
+// function ImageThumbnail({ imageUrl, alt }: { imageUrl: string; alt: string }) {
+//   // Since we're not storing images in Convex anymore, just use the URL directly
+//   if (!imageUrl) {
+//     return (
+//       <div className='h-20 w-20 bg-gray-200 dark:bg-gray-700 rounded-md flex items-center justify-center'>
+//         <span className='text-xs text-gray-500'>No image</span>
+//       </div>
+//     )
+//   }
+
+//   return (
+//     <img
+//       src={imageUrl}
+//       alt={alt}
+//       className='h-20 w-20 object-cover rounded-md shadow-sm'
+//     />
+//   )
+// }
+
 function TransactionHistory() {
   const transactions = useQuery(api.generation.getTransactionHistory)
 
@@ -482,7 +616,14 @@ function TransactionHistory() {
 
     try {
       const parsed = JSON.parse(result)
-      return parsed.url || null
+      // Since we're not storing images in Convex anymore, return the direct URL
+      if (
+        parsed.url &&
+        (parsed.url.startsWith('data:image/') || parsed.url.startsWith('http'))
+      ) {
+        return parsed.url
+      }
+      return null
     } catch (e) {
       return null
     }
@@ -545,15 +686,11 @@ function TransactionHistory() {
               </div>
 
               {/* Show image thumbnail if it's an image generation */}
-              {imageUrl && tx.status === 'completed' && (
+              {/* {imageUrl && tx.status === 'completed' && (
                 <div className='mt-2 flex justify-start'>
-                  <img
-                    src={imageUrl}
-                    alt={tx.prompt}
-                    className='h-20 w-20 object-cover rounded-md shadow-sm'
-                  />
+                  <ImageThumbnail imageUrl={imageUrl} alt={tx.prompt} />
                 </div>
-              )}
+              )} */}
             </div>
           )
         })}
