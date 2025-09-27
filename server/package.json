@@ -1,0 +1,24 @@
+{
+    "name": "x402-typescript-server",
+    "version": "1.0.0",
+    "type": "module",
+    "scripts": {
+        "build": "tsc",
+        "dev": "tsx watch src/server.ts",
+        "start": "node dist/server.js",
+        "test:client": "node src/client.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "x402-express": "^0.6.5",
+        "x402-fetch": "^0.6.0",
+        "viem": "^2.37.6",
+        "dotenv": "^16.4.7"
+    },
+    "devDependencies": {
+        "@types/express": "^4.17.21",
+        "@types/node": "^22.13.10",
+        "tsx": "^4.19.2",
+        "typescript": "^5.7.2"
+    }
+}
