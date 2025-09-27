@@ -95,48 +95,13 @@ router.post("/v1/chat/completions", async (req: Request, res: Response) => {
         console.log("✅ Payment verified! Processing chat completion request...");
         console.log("Request body:", JSON.stringify(req.body, null, 2));
 
-        // Mock LLM response for testing x402 payments
-        const mockResponse = {
-            id: `chatcmpl-${Date.now()}`,
-            object: "chat.completion",
-            created: Math.floor(Date.now() / 1000),
-            model: req.body.model || "gpt-3.5-turbo",
-            choices: [
-                {
-                    index: 0,
-                    message: {
-                        role: "assistant",
-                        content: "Hello! I'm a mock AI assistant. Your x402 payment was successful! 🎉 This response cost you $0.002 USDC."
-                    },
-                    finish_reason: "stop"
-                }
-            ],
-            usage: {
-                prompt_tokens: 20,
-                completion_tokens: 25,
-                total_tokens: 45
-            }
-        };
-
-        console.log("💰 Payment successful - returning mock response");
-
-        // Check if response has already been sent
-        if (res.headersSent) {
-            console.log("Response already sent, skipping");
-            return;
-        }
-
-        return res.status(200).json(mockResponse);
-
-        /* 
-        // TODO: Uncomment when LiteLLM is properly configured
         console.log(`Proxying request to ${LITELLM_URL}/v1/chat/completions`);
         
         const upstream = await fetch(`${LITELLM_URL}/v1/chat/completions`, {
             method: "POST",
             headers: {
                 "content-type": "application/json",
-                "authorization": `Bearer ${process.env.LITELLM_API_KEY}`,
+                "authorization": `Bearer ${process.env.LITELLM_KEY}`,
                 "x-request-id": req.header("x-request-id") || "",
             },
             body: JSON.stringify(req.body),
@@ -151,8 +116,13 @@ router.post("/v1/chat/completions", async (req: Request, res: Response) => {
             console.log("Upstream response:", text.substring(0, 200) + "...");
         }
 
+        // Check if response has already been sent
+        if (res.headersSent) {
+            console.log("Response already sent, skipping");
+            return;
+        }
+
         return res.status(upstream.status).type("application/json").send(text);
-        */
     } catch (e: any) {
         console.error("Proxy error:", e);
 
