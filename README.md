@@ -1,4 +1,3 @@
-```markdown
 # **Tomu – Pay-as-you-go LLM Access**  
 ### Micropayments for AI platforms using **x402-ws-stream** on Polygon
 
@@ -124,17 +123,15 @@ This Fluence-based setup let us spin up a fully integrated environment quickly a
 
 ### Environment Setup
 
-```bash
-npm install
-npm run dev
-```
+Run:
 
-Create a `.env` file:
+    npm install
+    npm run dev
 
-```bash
-VITE_WALLETCONNECT_PROJECT_ID=your_walletconnect_id
-OPENROUTER_API_KEY=your_openrouter_api_key
-```
+Create a `.env` file with:
+
+    VITE_WALLETCONNECT_PROJECT_ID=your_walletconnect_id
+    OPENROUTER_API_KEY=your_openrouter_api_key
 
 ---
 
@@ -157,4 +154,3 @@ Tomu is a **working demonstration of agent-run micropayments** on Polygon:
 ---
 
 **Tomu demonstrates that x402-ws-stream can power real-time, pay-as-you-go LLM access**, turning agentic micropayments into a scalable, subscription-free model for AI platforms—starting today with **AI picture generation** and ready for future **live-video or data streaming** use cases.
-```
