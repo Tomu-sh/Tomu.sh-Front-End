@@ -67,11 +67,9 @@ export default function Landing() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ duration: 0.6, delay: 0.2 }}
               >
-                Goodbye,{' '}
-                <span className='silver-gradient-text'>Subscription Fees.</span>
+                Goodbye, Subscription Fees.
                 <br className='hidden md:block' />
-                Hello,{' '}
-                <span className='silver-gradient-text'>pay-as-you-go</span>
+                Hello, <span className='text-white'>pay-as-you-go</span>
               </motion.h1>
               <motion.p
                 className='text-lg md:text-xl silver-muted max-w-3xl'
