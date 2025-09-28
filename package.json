@@ -22,6 +22,8 @@
     "convex": "^1.24.2",
     "ethers": "^6.15.0",
     "express": "^5.1.0",
+    "framer-motion": "^12.23.22",
+    "react-router-dom": "^6.26.2",
     "openai": "^5.23.1",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",

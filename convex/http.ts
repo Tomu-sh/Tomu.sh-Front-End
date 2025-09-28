@@ -29,18 +29,8 @@ http.route({
         apiKey: process.env.OPENROUTER_API_KEY || 'placeholder_key',
       })
 
-      // Merge options with defaults
-      const mergedOptions = {
-        model: 'stability.stable-diffusion-xl-1024-v1-0',
-        size: '1024x1024',
-        quality: 'standard',
-        style: 'vivid',
-        n: 1,
-        ...options,
-      }
-
       // Switch to chat.completions with Gemini 2.5 image model
-      const model = 'google/gemini-2.5-flash-image-preview'
+      const model = 'gemini-2.5-flash-image-preview'
       const respRaw = await fetch(
         'https://openrouter.ai/api/v1/chat/completions',
         {
@@ -50,7 +40,7 @@ http.route({
             Authorization: `Bearer ${process.env.OPENROUTER_API_KEY || ''}`,
             'HTTP-Referer':
               process.env.CONVEX_SITE_URL || 'http://localhost:3000',
-            'X-Title': 'Tomu Gen App',
+            'X-Title': 'Tomu.sh',
           },
           body: JSON.stringify({
             model,

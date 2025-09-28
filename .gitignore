@@ -29,3 +29,4 @@ package-lock.json
 # Infrastructure folder
 infra/
 
+server/.env

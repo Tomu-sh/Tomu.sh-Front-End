@@ -52,6 +52,28 @@ export const logTransaction = internalMutation({
     })
   },
 })
+
+// Public mutation for client-side logging of paid generations via x402
+export const addClientTransaction = mutation({
+  args: {
+    txHash: v.string(),
+    amount: v.number(),
+    prompt: v.string(),
+    generationType: v.optional(v.union(v.literal('text'), v.literal('image'))),
+    result: v.optional(v.string()),
+  },
+  handler: async (ctx, args) => {
+    await ctx.runMutation(internal.generation.logTransaction, {
+      txHash: args.txHash,
+      amount: args.amount,
+      prompt: args.prompt,
+      status: 'completed',
+      generationType: args.generationType,
+      options: {},
+      result: args.result,
+    })
+  },
+})
 export const processGeneration = action({
   args: {
     prompt: v.string(),
@@ -163,7 +185,7 @@ export const processGeneration = action({
             // Optional but recommended headers per OpenRouter docs
             'HTTP-Referer':
               process.env.CONVEX_SITE_URL || 'http://localhost:3000',
-            'X-Title': 'Tomu Gen App',
+            'X-Title': 'Tomu.sh',
           },
           body: JSON.stringify(requestBody),
         })
@@ -434,7 +456,8 @@ export const getTransactionHistory = query({
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
-      return []
+      // Public recent transactions (unauthenticated): show latest across all users
+      return await ctx.db.query('transactions').order('desc').take(10)
     }
 
     return await ctx.db

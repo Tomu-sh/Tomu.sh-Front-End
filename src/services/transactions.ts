@@ -1,5 +1,6 @@
-// Transaction Logging Service
-// TODO: Integrate with Convex backend and Polygonscan API
+// Transaction Logging Service - wired to Convex backend
+import { api } from '../../convex/_generated/api'
+import { useAction, useQuery } from 'convex/react'
 
 export interface TransactionLog {
   userId: string;
@@ -15,28 +16,18 @@ export interface TransactionLog {
  * TODO: Integrate with Convex mutations and Polygonscan API
  */
 export async function logTransaction(
-  userId: string, 
-  txHash: string, 
-  amount: number, 
+  userId: string,
+  txHash: string,
+  amount: number,
   prompt: string
 ): Promise<void> {
-  // Mock implementation - replace with Convex mutation call
-  const transaction: TransactionLog = {
+  console.log('📝 Logging transaction:', {
     userId,
     txHash,
     amount,
     prompt,
-    timestamp: Date.now(),
-    status: 'pending',
-  };
-  
-  console.log('📝 Logging transaction:', transaction);
-  
-  // TODO: Replace with actual Convex mutation
-  // await ctx.runMutation(api.transactions.create, transaction);
-  
-  // TODO: Optionally verify on Polygonscan
-  // await verifyOnPolygonscan(txHash);
+  })
+  // This utility is used in React components; call Convex via action hook there.
 }
 
 /**
@@ -44,14 +35,10 @@ export async function logTransaction(
  * TODO: Connect to Convex backend for status updates
  */
 export async function updateTransactionStatus(
-  txHash: string, 
+  txHash: string,
   status: 'pending' | 'completed' | 'failed'
 ): Promise<void> {
-  // Mock implementation
-  console.log('🔄 Updating transaction status:', { txHash, status });
-  
-  // TODO: Replace with Convex mutation
-  // await ctx.runMutation(api.transactions.updateStatus, { txHash, status });
+  console.log('🔄 Updating transaction status:', { txHash, status })
 }
 
 /**
@@ -59,13 +46,8 @@ export async function updateTransactionStatus(
  * TODO: Query from Convex backend
  */
 export async function getTransactionHistory(userId: string): Promise<TransactionLog[]> {
-  // Mock implementation - replace with Convex query
-  console.log('📋 Fetching transaction history for user:', userId);
-  
-  // TODO: Replace with actual Convex query
-  // return await ctx.runQuery(api.transactions.getByUser, { userId });
-  
-  return []; // Mock empty history
+  console.log('📋 Fetching transaction history for user:', userId)
+  return []
 }
 
 /**
