@@ -43,7 +43,7 @@ window.addEventListener('message', async (message) => {
   server: {
     proxy: {
       // x402 paid server
-      '/generate-image': {
+      '/v1': {
         target: 'http://localhost:4021',
         changeOrigin: true,
       },

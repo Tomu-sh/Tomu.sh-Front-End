@@ -1,5 +1,10 @@
 // Wallet Integration Service using RainbowKit and wagmi v2
-import { useAccount, useBalance, useDisconnect, useSendTransaction } from 'wagmi'
+import {
+  useAccount,
+  useBalance,
+  useDisconnect,
+  useSendTransaction,
+} from 'wagmi'
 import { formatUnits, parseUnits } from 'viem'
 
 export interface WalletInfo {
@@ -23,7 +28,11 @@ export function useWallet() {
   const { address, isConnected } = useAccount()
   const { data: balanceData, refetch: refetchBalance } = useBalance({
     address: address,
-    enabled: Boolean(address),
+  })
+  // USDC on Polygon Amoy testnet
+  const { data: usdcData } = useBalance({
+    address: address,
+    token: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
   })
   const { disconnect } = useDisconnect()
   const { sendTransactionAsync } = useSendTransaction()
@@ -34,11 +43,15 @@ export function useWallet() {
   const balanceInCents = balanceData
     ? Math.floor(parseFloat(balanceData.formatted) * 100)
     : 0
+  const usdcInCents = usdcData
+    ? Math.floor(parseFloat(usdcData.formatted) * 100)
+    : 0
 
   return {
     address,
     isConnected,
     balance: balanceInCents,
+    usdcBalance: usdcInCents,
     disconnect,
     refetchBalance,
     sendTransactionAsync,
@@ -67,11 +80,11 @@ export async function deductFromWallet(
 ): Promise<{ success: boolean; txHash?: string; error?: string }> {
   try {
     console.log('💸 Deducting from wallet:', cents, 'cents')
-    
+
     // Convert cents to MATIC (assuming 1 MATIC = $1 for simplicity)
     const maticAmount = cents / 100 // Convert cents to MATIC
     const weiAmount = parseUnits(maticAmount.toString(), 18) // Convert to wei
-    
+
     console.log('Sending transaction:', {
       to: toAddress,
       value: weiAmount,
@@ -88,9 +101,9 @@ export async function deductFromWallet(
     return { success: true, txHash }
   } catch (error) {
     console.error('❌ Transaction failed:', error)
-    return { 
-      success: false, 
-      error: error instanceof Error ? error.message : 'Transaction failed' 
+    return {
+      success: false,
+      error: error instanceof Error ? error.message : 'Transaction failed',
     }
   }
 }
