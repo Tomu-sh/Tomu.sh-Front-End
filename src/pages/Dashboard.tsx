@@ -14,12 +14,12 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Link } from 'react-router-dom'
 import { SignOutButton } from '../SignOutButton'
+import { useChainId } from 'wagmi'
 import {
   getCostEstimate,
   type X402Quote,
   useFetchWithPayment,
   generateImagePaidWithFetcher,
-  generateImagePreview,
 } from '../services/x402'
 import { useWallet } from '../services/wallet'
 import { updateTransactionStatus } from '../services/transactions'
@@ -28,19 +28,20 @@ import { updateTransactionStatus } from '../services/transactions'
 
 export default function Dashboard() {
   return (
-    <div className='min-h-screen flex flex-col bg-gradient-to-br from-gray-50 to-gray-100 dark:from-gray-950 dark:to-gray-900 text-gray-900 dark:text-gray-100'>
+    <div className='min-h-screen flex flex-col noir text-white relative'>
+      <div className='starfield twinkle' />
       <motion.header
-        className='sticky top-0 z-20 glass h-16 flex justify-between items-center border-b border-gray-200/30 dark:border-gray-800/30 shadow-sm px-4 md:px-8'
+        className='sticky top-0 z-20 h-16 flex justify-between items-center border-b silver-border/60 px-4 md:px-8 bg-black/60 backdrop-blur-md'
         initial={{ y: -20, opacity: 0 }}
         animate={{ y: 0, opacity: 1 }}
         transition={{ duration: 0.4, ease: 'easeOut' }}
       >
         <div className='flex items-center gap-2'>
-          <div className='w-8 h-8 rounded-md bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center text-white font-bold'>
-            T
+          <div className='w-8 h-8 rounded-md bg-white/10 ring-1 ring-white/20 flex items-center justify-center font-bold'>
+            ✦
           </div>
-          <h2 className='text-xl font-semibold tracking-tight'>
-            Tomu<span className='gradient-text'>.sh</span>
+          <h2 className='text-xl font-semibold tracking-tight silver-text'>
+            Tomu<span className='text-white/60'>.sh</span>
           </h2>
         </div>
         <div className='flex items-center gap-3'>
@@ -51,16 +52,17 @@ export default function Dashboard() {
           <Authenticated>
             <SignOutButton />
           </Authenticated>
-          <Link to='/' className='btn btn-secondary'>
+          <Link
+            to='/'
+            className='btn px-3 py-2 bg-transparent border border-white/20 hover:bg-white/10'
+          >
             Home
           </Link>
         </div>
       </motion.header>
-      <main className='flex-1 flex flex-col'>
-        <div className='bg-gradient-to-br from-gray-900 to-gray-950 dark:from-gray-900 dark:to-black text-white relative overflow-hidden'>
-          <div className='container-custom py-6'>
-            <Content />
-          </div>
+      <main className='flex-1 flex flex-col relative overflow-hidden'>
+        <div className='container-custom py-6 relative z-10'>
+          <Content />
         </div>
       </main>
     </div>
@@ -104,7 +106,7 @@ function GenerationInterface() {
     imageUrl?: string
     model?: string
   } | null>(null)
-  const [isDirectTest, setIsDirectTest] = useState(false)
+  // direct test state removed
   const [quote, setQuote] = useState<X402Quote | null>(null)
   const [generationType, setGenerationType] = useState<'text' | 'image'>(
     'image'
@@ -123,9 +125,15 @@ function GenerationInterface() {
 
   const {
     balance: walletBalance,
+    usdcBalance,
     sendTransactionAsync,
     refetchBalance,
   } = useWallet()
+  const chainId = useChainId()
+  const polygonscanBase =
+    chainId === 80002
+      ? 'https://amoy.polygonscan.com'
+      : 'https://polygonscan.com'
   const loggedInUser = useQuery(api.auth.loggedInUser)
   const processGeneration = useAction(api.generation.processGeneration)
   const addClientTransaction = useMutation(api.generation.addClientTransaction)
@@ -133,7 +141,12 @@ function GenerationInterface() {
 
   useEffect(() => {
     if (prompt.trim()) {
-      getCostEstimate(prompt, imageOptions.size).then(setQuote)
+      // Demo mode: show step increases roughly per token (~4 chars)
+      getCostEstimate(prompt, imageOptions.size, undefined, {
+        demo: true,
+        perTokenUsd: 0.001, // $0.001 per token for demo visibility
+        baseFeeUsd: 0, // no base fee in demo so increments are clearer
+      }).then(setQuote)
     } else {
       setQuote(null)
     }
@@ -155,37 +168,19 @@ function GenerationInterface() {
     }
   }
 
-  const handleDirectTest = async () => {
-    if (!prompt.trim()) return
-    setIsGenerating(true)
-    setResult(null)
-    setIsDirectTest(true)
-    try {
-      toast.info('Generating preview (no payment)...')
-      const preview = await generateImagePreview(prompt, imageOptions.size)
-      let imageUrl = ''
-      imageUrl = preview.url
-      setResult({
-        txHash: 'direct-test',
-        result: 'Preview generated',
-        imageUrl,
-        model: preview.model,
-      })
-      toast.success('Preview ready!')
-    } catch (error) {
-      console.error('Direct test failed:', error)
-      toast.error('Direct test failed: ' + (error as Error).message)
-    } finally {
-      setIsGenerating(false)
-      setIsDirectTest(false)
-    }
-  }
+  // direct test handler removed
 
   const handleGenerate = async () => {
     if (!prompt.trim() || !quote) return
     setIsGenerating(true)
     setResult(null)
     try {
+      // Ensure an authenticated session (anonymous) so we can log transactions
+      if (loggedInUser === null) {
+        try {
+          await signIn('anonymous')
+        } catch {}
+      }
       toast.info(`Processing x402 payment & generating ${generationType}...`)
       if (generationType === 'image') {
         if (!(fetchWithPayment as any)) {
@@ -207,13 +202,16 @@ function GenerationInterface() {
           imageUrl = data.data[0].url
         }
         // Log x402 tx if available
-        if (loggedInUser && data?.x402Payment?.txHash) {
+        if (data?.x402Payment?.txHash) {
           await addClientTransaction({
             txHash: data.x402Payment.txHash,
             amount: data.x402Payment.amountCents ?? quote.estimatedCost,
             prompt: prompt.trim(),
             generationType: 'image',
-            result: JSON.stringify({ url: imageUrl, model: 'gemini-2.5-flash-image' }),
+            result: JSON.stringify({
+              url: imageUrl,
+              model: 'gemini-2.5-flash-image',
+            }),
           })
         }
         setResult({
@@ -237,7 +235,9 @@ function GenerationInterface() {
         })
       }
       toast.success(
-        `${generationType.charAt(0).toUpperCase() + generationType.slice(1)} generated! Cost: $${(quote.estimatedCost / 100).toFixed(2)}`
+        `${
+          generationType.charAt(0).toUpperCase() + generationType.slice(1)
+        } generated! Cost: $${formatUsd(quote.estimatedCost)}`
       )
     } catch (error) {
       toast.error(error instanceof Error ? error.message : 'Generation failed')
@@ -246,10 +246,18 @@ function GenerationInterface() {
       }
     } finally {
       setIsGenerating(false)
+      try {
+        await refetchBalance?.()
+      } catch {}
     }
   }
 
   const canGenerate = prompt.trim() && quote && !isGenerating
+
+  const formatUsd = (cents: number) => {
+    const dollars = cents / 100
+    return dollars < 0.01 ? dollars.toFixed(4) : dollars.toFixed(2)
+  }
 
   return (
     <div className='space-y-6'>
@@ -267,7 +275,7 @@ function GenerationInterface() {
         </div>
       </Unauthenticated>
       <motion.div
-        className='card p-6'
+        className='card-noir p-6'
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
@@ -388,33 +396,32 @@ function GenerationInterface() {
         )}
 
         {prompt && quote && (
-          <div className='mt-4 p-4 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-950/30 dark:to-indigo-950/30 border border-blue-200 dark:border-blue-900 rounded-lg shadow-sm'>
-            <div className='flex justify-between items-center'>
-              <p className='text-sm text-blue-800 dark:text-blue-300'>
-                <span className='font-medium'>x402 Quote:</span>
-              </p>
-              <div className='text-lg font-bold text-blue-800 dark:text-blue-300'>
-                ${(quote.estimatedCost / 100).toFixed(2)}
+          <div className='mt-4 live-border'>
+            <div className='live-inner p-4 rounded-[14px]'>
+              <div className='flex justify-between items-center'>
+                <p className='text-lg text-blue-300'>
+                  <span className='font-extrabold'>x402 Quote:</span>
+                </p>
+                <div className='text-xl font-bold text-blue-300'>
+                  ${formatUsd(quote.estimatedCost)}
+                </div>
+              </div>
+              <div className='mt-1 text-xs text-blue-300/80'>
+                After payment balance: $
+                {formatUsd(
+                  Math.max((usdcBalance || 0) - quote.estimatedCost, 0)
+                )}
               </div>
             </div>
           </div>
         )}
 
         <motion.button
-          onClick={handleDirectTest}
-          disabled={!prompt.trim() || isGenerating}
-          className='mt-4 w-full bg-gradient-to-r from-green-600 to-emerald-600 text-white font-medium py-3 px-6 rounded-lg'
-        >
-          {isGenerating && isDirectTest
-            ? 'Testing Direct Generation...'
-            : 'Test Direct (No Payment Required)'}
-        </motion.button>
-        <motion.button
           onClick={handleGenerate}
           disabled={!canGenerate as any}
           className='mt-3 w-full bg-gradient-to-r from-indigo-600 to-violet-600 text-white font-medium py-3 px-6 rounded-lg'
         >
-          {isGenerating && !isDirectTest
+          {isGenerating
             ? 'Processing x402 Payment & Generation...'
             : `Generate ${generationType === 'image' ? 'Image' : 'Text'} with x402`}
         </motion.button>
@@ -422,7 +429,7 @@ function GenerationInterface() {
 
       {result && (
         <motion.div
-          className='card p-6'
+          className='card-noir p-6'
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ duration: 0.5 }}
@@ -433,7 +440,11 @@ function GenerationInterface() {
               Success
             </div>
           </div>
-          {result.imageUrl ? (
+          {isGenerating ? (
+            <div className='mb-6 flex justify-center'>
+              <div className='relative rounded-lg overflow-hidden shadow-lg w-full max-w-3xl h-[420px] skeleton' />
+            </div>
+          ) : result.imageUrl ? (
             <div className='mb-6 flex justify-center'>
               <div className='relative rounded-lg overflow-hidden shadow-lg'>
                 <img
@@ -449,7 +460,7 @@ function GenerationInterface() {
               </div>
             </div>
           ) : (
-            <div className='bg-gray-50 dark:bg-gray-950 rounded-lg p-4 mb-4 border border-gray-200 dark:border-gray-800'>
+            <div className='card-noir p-4 mb-4'>
               <p className='text-gray-800 dark:text-gray-100'>
                 {result.result}
               </p>
@@ -459,25 +470,34 @@ function GenerationInterface() {
             <span className='text-sm text-gray-600 dark:text-gray-400'>
               x402 payment completed
             </span>
-            <a
-              href={`https://amoy.polygonscan.com/tx/${result.txHash}`}
-              target='_blank'
-              rel='noopener noreferrer'
-              className='text-indigo-600 hover:text-indigo-800 dark:text-violet-400 dark:hover:text-violet-300 text-sm font-medium'
-            >
-              View onchain receipt
-            </a>
+            {result.txHash && result.txHash.startsWith('0x') ? (
+              <a
+                href={`${polygonscanBase}/tx/${result.txHash}`}
+                target='_blank'
+                rel='noopener noreferrer'
+                className='text-indigo-600 hover:text-indigo-800 dark:text-violet-400 dark:hover:text-violet-300 text-sm font-medium'
+              >
+                View onchain receipt
+              </a>
+            ) : (
+              <span className='text-xs text-gray-500'>Receipt pending</span>
+            )}
           </div>
         </motion.div>
       )}
 
-      <TransactionHistory />
+      {loggedInUser ? <TransactionHistory /> : null}
     </div>
   )
 }
 
 function TransactionHistory() {
   const transactions = useQuery(api.generation.getTransactionHistory)
+  const chainId = useChainId()
+  const polygonscanBase =
+    chainId === 80002
+      ? 'https://amoy.polygonscan.com'
+      : 'https://polygonscan.com'
 
   const extractImageUrl = (result: string | undefined): string | null => {
     if (!result) return null
@@ -495,9 +515,20 @@ function TransactionHistory() {
     }
   }
 
+  if (transactions === undefined) {
+    return (
+      <div className='card-noir p-6'>
+        <h3 className='text-lg font-semibold mb-4'>Recent Transactions</h3>
+        <p className='text-gray-500 dark:text-gray-400 text-sm'>
+          Loading recent transactions...
+        </p>
+      </div>
+    )
+  }
+
   if (!transactions || transactions.length === 0) {
     return (
-      <div className='bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6'>
+      <div className='card-noir p-6'>
         <h3 className='text-lg font-semibold mb-4'>Recent Transactions</h3>
         <p className='text-gray-500 dark:text-gray-400 text-sm'>
           No transactions yet. Start generating to see your history!
@@ -507,7 +538,7 @@ function TransactionHistory() {
   }
 
   return (
-    <div className='bg-white dark:bg-gray-900 rounded-2xl shadow-sm border border-gray-200 dark:border-gray-800 p-6'>
+    <div className='card-noir p-6'>
       <h3 className='text-lg font-semibold mb-4'>Recent Transactions</h3>
       <div className='space-y-4'>
         {transactions.slice(0, 5).map((tx) => {
@@ -540,6 +571,16 @@ function TransactionHistory() {
                   >
                     {tx.status}
                   </span>
+                  {tx.txHash?.startsWith('0x') && (
+                    <a
+                      href={`${polygonscanBase}/tx/${tx.txHash}`}
+                      target='_blank'
+                      rel='noopener noreferrer'
+                      className='text-xs text-indigo-600 hover:text-indigo-800 dark:text-violet-400 dark:hover:text-violet-300 block mt-1'
+                    >
+                      View onchain receipt
+                    </a>
+                  )}
                 </div>
               </div>
             </div>

@@ -32,6 +32,15 @@ export function useFetchWithPayment() {
   return wrapped
 }
 
+// Estimate tokens from prompt length (≈ 1 token per 4 characters)
+function estimateTokensForPrompt(prompt: string, override?: number): number {
+  if (override && override > 0) return Math.floor(override)
+  const length = (prompt || '').trim().length
+  const approx = Math.ceil(length / 4)
+  // Clamp to a reasonable range
+  return Math.max(1, Math.min(4096, approx))
+}
+
 export async function generateImagePaid(prompt: string, size = '1024x1024') {
   const f = useFetchWithPayment()!
   // Hit x402-protected server endpoint which proxies to LiteLLM
@@ -46,7 +55,7 @@ export async function generateImagePaid(prompt: string, size = '1024x1024') {
           content: `Generate an image with size ${size} for prompt: ${prompt}`,
         },
       ],
-      max_tokens: 50,
+      max_tokens: estimateTokensForPrompt(prompt),
     }),
   })
   if (!resp.ok) throw new Error(`Failed: ${resp.status}`)
@@ -72,7 +81,8 @@ export async function generateImagePaid(prompt: string, size = '1024x1024') {
 export async function generateImagePaidWithFetcher(
   fetcher: (input: RequestInfo, init?: RequestInit) => Promise<Response>,
   prompt: string,
-  size = '1024x1024'
+  size = '1024x1024',
+  maxTokensOverride?: number
 ) {
   const resp = await fetcher('/v1/chat/completions', {
     method: 'POST',
@@ -85,7 +95,7 @@ export async function generateImagePaidWithFetcher(
           content: `Generate an image with size ${size} for prompt: ${prompt}`,
         },
       ],
-      max_tokens: 50,
+      max_tokens: estimateTokensForPrompt(prompt, maxTokensOverride),
     }),
   })
   if (!resp.ok) throw new Error(`Failed: ${resp.status}`)
@@ -150,13 +160,57 @@ export async function generateImagePreview(
  * Get cost estimate for a generation request
  * HUSK: Replace with actual x402 quote API integration
  */
+type QuoteOptions = {
+  // Enable demo mode to show visible step increases every token (~4 chars)
+  demo?: boolean
+  // Override per-token USD price in demo mode (default $0.001 per token)
+  perTokenUsd?: number
+  // Override base fee USD in demo mode (default $0)
+  baseFeeUsd?: number
+}
+
 export async function getCostEstimate(
   prompt: string,
-  size = '1024x1024'
+  size = '1024x1024',
+  maxTokensOverride?: number,
+  opts?: QuoteOptions
 ): Promise<X402Quote> {
-  // Use server's configured price from x402 middleware: $0.002 = 0.2 cents
-  // Adjustments per size/model could be added later if needed
-  const estimatedCost = 0.2
+  // Mirror server-side pricing (server/src/routes/x402Llm.ts):
+  // total = tokens × pricePerToken(model) + x402Fee
+  // Returned in cents; allow fractional cents to surface micro-prices.
+
+  // Token estimate (≈ 1 token per 4 chars) unless override provided
+  const tokens = estimateTokensForPrompt(prompt, maxTokensOverride)
+
+  // Map model groups to price per token (USD)
+  const pricePerTokenByModel: Record<string, number> = {
+    'gpt-4': 0.00001,
+    'gpt-3.5-turbo': 0.000005,
+    'claude-3': 0.000008,
+    'gemini-pro': 0.000003,
+    'llama-2': 0.000002,
+    default: 0.000005,
+  }
+
+  // Our image generations currently use a Gemini image model via chat completions.
+  // Normalize to a pricing bucket similar to the server's map.
+  // Note: `size` can affect cost in future; for now it does not influence x402 fee.
+  const normalizedModel = 'gemini-pro'
+  const realPricePerToken =
+    pricePerTokenByModel[normalizedModel] ?? pricePerTokenByModel.default
+
+  // Demo pricing: visible step every token with configurable rate
+  const demoEnabled = Boolean(opts?.demo)
+  const demoPerTokenUsd = opts?.perTokenUsd ?? 0.001
+  const demoBaseFeeUsd = opts?.baseFeeUsd ?? 0
+
+  const modelCostUsd =
+    tokens * (demoEnabled ? demoPerTokenUsd : realPricePerToken)
+  const x402FeeUsd = demoEnabled ? demoBaseFeeUsd : 0.002 // flat fee in USD
+
+  const estimatedUsd = modelCostUsd + x402FeeUsd
+  const estimatedCost = estimatedUsd * 100 // cents (can be fractional)
+
   return {
     estimatedCost,
     quoteId: `quote_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,

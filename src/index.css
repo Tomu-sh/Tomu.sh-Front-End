@@ -137,6 +137,149 @@
 }
 
 @layer utilities {
+  .card-noir {
+    --tw-bg-opacity: 0.6;
+    background-color: rgb(0 0 0 / var(--tw-bg-opacity, 1));
+    @apply border border-white/10 rounded-2xl shadow-md hover:shadow-lg transition-all duration-300;
+  }
+  /* Starfield background */
+  .starfield {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    background:
+      radial-gradient(
+        2px 2px at 20% 30%,
+        rgba(255, 255, 255, 0.7),
+        transparent 60%
+      ),
+      radial-gradient(
+        1px 1px at 40% 70%,
+        rgba(255, 255, 255, 0.6),
+        transparent 60%
+      ),
+      radial-gradient(
+        1.5px 1.5px at 70% 20%,
+        rgba(255, 255, 255, 0.5),
+        transparent 60%
+      ),
+      radial-gradient(
+        1px 1px at 80% 60%,
+        rgba(255, 255, 255, 0.4),
+        transparent 60%
+      ),
+      radial-gradient(
+        2px 2px at 10% 80%,
+        rgba(255, 255, 255, 0.5),
+        transparent 60%
+      ),
+      radial-gradient(
+        1px 1px at 15% 50%,
+        rgba(255, 255, 255, 0.5),
+        transparent 60%
+      ),
+      radial-gradient(
+        1.5px 1.5px at 55% 25%,
+        rgba(255, 255, 255, 0.5),
+        transparent 60%
+      ),
+      radial-gradient(
+        1px 1px at 65% 75%,
+        rgba(255, 255, 255, 0.5),
+        transparent 60%
+      ),
+      radial-gradient(
+        2px 2px at 90% 30%,
+        rgba(255, 255, 255, 0.5),
+        transparent 60%
+      );
+    mask-image: radial-gradient(
+      80% 60% at 50% 40%,
+      black 60%,
+      transparent 100%
+    );
+  }
+
+  .twinkle {
+    animation: twinkle 3s ease-in-out infinite;
+  }
+
+  @keyframes twinkle {
+    0%,
+    100% {
+      opacity: 0.6;
+    }
+    50% {
+      opacity: 1;
+    }
+  }
+
+  /* Noir theme helpers */
+  .noir {
+    background: #000;
+    color: #e6e6e6;
+  }
+
+  /* Live border marquee for quote */
+  .live-border {
+    position: relative;
+    border-radius: 16px;
+    padding: 2px; /* thicker animated edge */
+    background: linear-gradient(120deg, #60a5fa, #7c3aed, #60a5fa);
+    background-size: 300% 100%;
+    animation: border-move 2.5s linear infinite;
+    box-shadow:
+      0 0 0 1px rgba(125, 211, 252, 0.25),
+      0 0 22px rgba(124, 58, 237, 0.25);
+  }
+  .live-border > .live-inner {
+    border-radius: 14px;
+    background-color: rgb(0 0 0 / 0.6);
+  }
+  @keyframes border-move {
+    0% {
+      background-position: 0% 50%;
+    }
+    100% {
+      background-position: 200% 50%;
+    }
+  }
+
+  /* Skeleton shimmer */
+  .skeleton {
+    position: relative;
+    overflow: hidden;
+    background-color: rgb(17 24 39 / 0.6);
+  }
+  .skeleton::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background: linear-gradient(
+      90deg,
+      transparent,
+      rgba(255, 255, 255, 0.08),
+      transparent
+    );
+    animation: shimmer 1.6s infinite;
+  }
+  @keyframes shimmer {
+    100% {
+      transform: translateX(100%);
+    }
+  }
+
+  .silver-text {
+    color: #e6e6e6;
+  }
+  .silver-muted {
+    color: #b3b3b3;
+  }
+  .silver-border {
+    border-color: #2a2a2a;
+  }
+
   /* Card styles */
   .card {
     @apply bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 

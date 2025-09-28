@@ -62,6 +62,7 @@ export const addClientTransaction = mutation({
     generationType: v.optional(v.union(v.literal('text'), v.literal('image'))),
     result: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     await ctx.runMutation(internal.generation.logTransaction, {
       txHash: args.txHash,
@@ -72,6 +73,7 @@ export const addClientTransaction = mutation({
       options: {},
       result: args.result,
     })
+    return null
   },
 })
 export const processGeneration = action({
@@ -453,11 +455,38 @@ export const generateImage = action({
 
 export const getTransactionHistory = query({
   args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id('transactions'),
+      _creationTime: v.number(),
+      userId: v.id('users'),
+      txHash: v.string(),
+      amount: v.number(),
+      prompt: v.string(),
+      result: v.optional(v.string()),
+      status: v.union(
+        v.literal('pending'),
+        v.literal('completed'),
+        v.literal('failed')
+      ),
+      generationType: v.optional(
+        v.union(v.literal('text'), v.literal('image'))
+      ),
+      options: v.optional(
+        v.object({
+          model: v.optional(v.string()),
+          size: v.optional(v.string()),
+          quality: v.optional(v.string()),
+          style: v.optional(v.string()),
+        })
+      ),
+    })
+  ),
   handler: async (ctx) => {
     const userId = await getAuthUserId(ctx)
     if (!userId) {
-      // Public recent transactions (unauthenticated): show latest across all users
-      return await ctx.db.query('transactions').order('desc').take(10)
+      // Unauthenticated: do not return any transactions
+      return []
     }
 
     return await ctx.db
