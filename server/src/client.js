@@ -1,5 +1,5 @@
 import { wrapFetchWithPayment, decodeXPaymentResponse } from "x402-fetch";
-import { createWalletClient, http } from 'viem';
+import { createWalletClient, createPublicClient, http } from 'viem';
 import { privateKeyToAccount } from 'viem/accounts';
 import { polygonAmoy } from 'viem/chains';
 import 'dotenv/config';
@@ -13,8 +13,16 @@ if (!privateKey) {
 const formattedPrivateKey = privateKey.startsWith('0x') ? privateKey : `0x${privateKey}`;
 
 const account = privateKeyToAccount(formattedPrivateKey);
-const client = createWalletClient({
+
+// Create wallet client for payments
+const walletClient = createWalletClient({
   account,
+  chain: polygonAmoy,
+  transport: http()
+});
+
+// Create public client for reading contract data
+const publicClient = createPublicClient({
   chain: polygonAmoy,
   transport: http()
 });
@@ -31,8 +39,9 @@ const SERVER_URL = process.env.SERVER_URL || 'http://localhost:4021';
 console.log("🌐 Using FACILITATOR_URL:", FACILITATOR_URL);
 console.log("🌐 Using SERVER_URL:", SERVER_URL);
 
-const fetchWithPayment = wrapFetchWithPayment(fetch, client);
+const fetchWithPayment = wrapFetchWithPayment(fetch, walletClient);
 console.log("✅ x402 fetch wrapper created successfully");
+
 
 // Check wallet balance (USDC on Polygon Amoy)
 const checkUSDCBalance = async () => {
@@ -45,7 +54,7 @@ const checkUSDCBalance = async () => {
     console.log("  Wallet:", account.address);
     
     // Simple balance check using viem
-    const balance = await client.readContract({
+    const balance = await publicClient.readContract({
       address: USDC_ADDRESS,
       abi: [
         {
@@ -67,7 +76,7 @@ const checkUSDCBalance = async () => {
       args: [account.address],
     });
     
-    const decimals = await client.readContract({
+    const decimals = await publicClient.readContract({
       address: USDC_ADDRESS,
       abi: [
         {
