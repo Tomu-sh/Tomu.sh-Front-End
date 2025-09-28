@@ -11,6 +11,40 @@ const PAYMENT_ADDRESS = process.env.PAYMENT_ADDRESS;
 const FACILITATOR_URL = process.env.FACILITATOR_URL || "https://x402.polygon.technology";
 const LITELLM_URL = process.env.LITELLM_URL || "http://localhost:8080";
 
+// Simplified cost estimation function
+const estimateCost = (requestBody: any) => {
+    // Simple model pricing per token (small, uniform pricing)
+    const modelPricing: Record<string, number> = {
+        'gpt-4': 0.00001,
+        'gpt-3.5-turbo': 0.000005,
+        'claude-3': 0.000008,
+        'gemini-pro': 0.000003,
+        'llama-2': 0.000002,
+        'default': 0.000005
+    };
+
+    const model = requestBody.model || 'gpt-3.5-turbo';
+    const maxTokens = requestBody.max_tokens || 150;
+
+    // Get price per token for the model (fallback to default)
+    const pricePerToken = modelPricing[model] || modelPricing['default'];
+
+    // Calculate model cost based on max tokens
+    const modelCost = maxTokens * pricePerToken;
+
+    // x402 fixed fee
+    const x402Fee = 0.002;
+
+    return {
+        model,
+        maxTokens,
+        pricePerToken,
+        modelCost,
+        x402Fee,
+        totalCost: modelCost + x402Fee
+    };
+};
+
 if (!PAYMENT_ADDRESS) {
     throw new Error("PAYMENT_ADDRESS environment variable is required");
 }
@@ -94,6 +128,15 @@ router.post("/v1/chat/completions", async (req: Request, res: Response) => {
     try {
         console.log("✅ Payment verified! Processing chat completion request...");
         console.log("Request body:", JSON.stringify(req.body, null, 2));
+
+        // Calculate and log cost estimation
+        const costEstimate = estimateCost(req.body);
+        console.log("\n💰 Cost Estimation:");
+        console.log(`  Model: ${costEstimate.model}`);
+        console.log(`  Max Tokens: ${costEstimate.maxTokens}`);
+        console.log(`  Model Cost: $${costEstimate.modelCost.toFixed(6)}`);
+        console.log(`  x402 Fee: $${costEstimate.x402Fee.toFixed(3)}`);
+        console.log(`  Total Cost: $${costEstimate.totalCost.toFixed(6)}`);
 
         console.log(`Proxying request to ${LITELLM_URL}/v1/chat/completions`);
         
