@@ -1,6 +1,6 @@
 // Transaction Logging Service - wired to Convex backend
 import { api } from '../../convex/_generated/api'
-import { useMutation } from 'convex/react'
+import { useAction, useQuery } from 'convex/react'
 
 export interface TransactionLog {
   userId: string
@@ -34,15 +34,11 @@ export async function logTransaction(
  * Update transaction status
  * TODO: Connect to Convex backend for status updates
  */
-export function useUpdateTransactionStatus() {
-  const mutate = useMutation(api.generation.updateTransactionStatus)
-  return async (txHash: string, status: 'pending' | 'completed' | 'failed') => {
-    try {
-      await mutate({ txHash, status })
-    } catch (e) {
-      console.warn('Failed to update transaction status', e)
-    }
-  }
+export async function updateTransactionStatus(
+  txHash: string,
+  status: 'pending' | 'completed' | 'failed'
+): Promise<void> {
+  console.log('🔄 Updating transaction status:', { txHash, status })
 }
 
 /**

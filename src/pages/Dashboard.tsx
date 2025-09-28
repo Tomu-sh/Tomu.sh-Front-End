@@ -22,7 +22,7 @@ import {
   generateImagePaidWithFetcher,
 } from '../services/x402'
 import { useWallet } from '../services/wallet'
-import { useUpdateTransactionStatus } from '../services/transactions'
+import { updateTransactionStatus } from '../services/transactions'
 // already imported api above
 // Removed direct LiteLLM image URL generation in favor of x402 endpoint
 
@@ -129,7 +129,6 @@ function GenerationInterface() {
     sendTransactionAsync,
     refetchBalance,
   } = useWallet()
-  const updateTransactionStatus = useUpdateTransactionStatus()
   const chainId = useChainId()
   const polygonscanBase =
     chainId === 80002
@@ -184,13 +183,13 @@ function GenerationInterface() {
       }
       toast.info(`Processing x402 payment & generating ${generationType}...`)
       if (generationType === 'image') {
-        if (!(fetchWithPayment as any)) {
-          throw new Error(
-            'Wallet not connected. Connect wallet to pay via x402.'
-          )
+        const f: any = fetchWithPayment as any
+        if (!f || !f.__x402) {
+          toast.error('Connect your wallet to enable x402 payments')
+          return
         }
         const data: any = await generateImagePaidWithFetcher(
-          fetchWithPayment as any,
+          f,
           prompt.trim(),
           imageOptions.size
         )
@@ -487,7 +486,7 @@ function GenerationInterface() {
         </motion.div>
       )}
 
-      <TransactionHistory />
+      {loggedInUser ? <TransactionHistory /> : null}
     </div>
   )
 }

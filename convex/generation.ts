@@ -76,33 +76,6 @@ export const addClientTransaction = mutation({
     return null
   },
 })
-
-// Public mutation to update a transaction's status by txHash for the authenticated user
-export const updateTransactionStatus = mutation({
-  args: {
-    txHash: v.string(),
-    status: v.union(
-      v.literal('pending'),
-      v.literal('completed'),
-      v.literal('failed')
-    ),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const userId = await getAuthUserId(ctx)
-    if (!userId) return null
-
-    const rows = await ctx.db
-      .query('transactions')
-      .withIndex('by_user', (q) => q.eq('userId', userId))
-      .collect()
-    const match = rows.find((t) => t.txHash === args.txHash)
-    if (match) {
-      await ctx.db.patch(match._id, { status: args.status })
-    }
-    return null
-  },
-})
 export const processGeneration = action({
   args: {
     prompt: v.string(),
@@ -132,10 +105,9 @@ export const processGeneration = action({
     newBalance: v.number(),
   }),
   handler: async (ctx, args) => {
-    // Use provided txHash (from on-chain payment) or synthesize a non-onchain identifier
-    // Note: Do NOT prefix synthetic identifiers with "0x" to avoid rendering on-chain links
+    // Use provided txHash (from on-chain payment) or synthesize one
     const txHash =
-      args.txHash ?? 'synthetic_' + Math.random().toString(16).substring(2, 18)
+      args.txHash ?? '0x' + Math.random().toString(16).substring(2, 66)
 
     // Create a pending transaction record
     await ctx.runMutation(internal.generation.logTransaction, {
