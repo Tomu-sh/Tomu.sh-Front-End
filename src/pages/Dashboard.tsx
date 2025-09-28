@@ -22,7 +22,7 @@ import {
   generateImagePaidWithFetcher,
 } from '../services/x402'
 import { useWallet } from '../services/wallet'
-import { updateTransactionStatus } from '../services/transactions'
+import { useUpdateTransactionStatus } from '../services/transactions'
 // already imported api above
 // Removed direct LiteLLM image URL generation in favor of x402 endpoint
 
@@ -129,6 +129,7 @@ function GenerationInterface() {
     sendTransactionAsync,
     refetchBalance,
   } = useWallet()
+  const updateTransactionStatus = useUpdateTransactionStatus()
   const chainId = useChainId()
   const polygonscanBase =
     chainId === 80002
@@ -486,7 +487,7 @@ function GenerationInterface() {
         </motion.div>
       )}
 
-      {loggedInUser ? <TransactionHistory /> : null}
+      <TransactionHistory />
     </div>
   )
 }
